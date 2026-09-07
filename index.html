@@ -400,6 +400,18 @@
         return totals;
       };
 
+      // Returns the item IDs (question numbers) that were left unanswered,
+      // so counsellors can see exactly what a student skipped, not just a count.
+      const getSkippedItemIds = (items, responses, isMultiSelect) => {
+        const skipped = [];
+        items.forEach((item) => {
+          const val = responses[item.id];
+          const isEmpty = isMultiSelect ? (!val || val.length === 0) : (val === undefined);
+          if (isEmpty) skipped.push(item.id);
+        });
+        return skipped;
+      };
+
       const submitAssessment = () => {
         setView('summary');
       };
@@ -855,6 +867,11 @@
         const p3Profile = calculateLearningProfile(part3Responses);
         const p4Totals = calculateInterestProfile(part4Responses);
 
+        const p1Skipped = getSkippedItemIds(workStyleItems, part1Responses, false);
+        const p2Skipped = getSkippedItemIds(gritItems, part2Responses, false);
+        const p3Skipped = getSkippedItemIds(learningApproachItems, part3Responses, true);
+        const p4Skipped = getSkippedItemIds(interestProfileItems, part4Responses, false);
+
         return (
           <div className="max-w-3xl mx-auto my-8 p-6 md:p-8 bg-white rounded-lg shadow-sm border space-y-6 print-shadow-none">
             
@@ -877,6 +894,9 @@
                   <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2.5 py-1 rounded">Average: {p1Score.avg} / 5</span>
                 </div>
                 <p className="text-xs text-gray-600">Completed items: {p1Score.count} / 32</p>
+                {p1Skipped.length > 0 && (
+                  <p className="text-xs text-red-600 font-medium">Skipped: Q{p1Skipped.join(', Q')}</p>
+                )}
                 {part1SelfCheck && (
                   <p className="text-xs text-gray-700 italic border-l-2 border-blue-400 pl-2 mt-2">
                     "Self Check: {part1SelfCheck}"
@@ -890,7 +910,10 @@
                   <h3 className="font-bold text-gray-800">Part 2: Grit Score</h3>
                   <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded">Overall Score: {p2Score.score} / 5</span>
                 </div>
-                <p className="text-xs text-gray-600">Perseverance & consistency score across {p2Score.count} items.</p>
+                <p className="text-xs text-gray-600">Completed items: {p2Score.count} / 10</p>
+                {p2Skipped.length > 0 && (
+                  <p className="text-xs text-red-600 font-medium">Skipped: Q{p2Skipped.join(', Q')}</p>
+                )}
                 {part2SelfCheck && (
                   <p className="text-xs text-gray-700 italic border-l-2 border-emerald-400 pl-2 mt-2">
                     "Self Check: {part2SelfCheck}"
@@ -901,6 +924,10 @@
               {/* PART 3 SUMMARY */}
               <div className="bg-slate-50 p-5 rounded-lg border text-left space-y-4" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                 <h3 className="font-bold text-gray-800 border-b pb-2">Part 3: Learning Approach Breakdown</h3>
+                <p className="text-xs text-gray-600">Completed scenarios: {10 - p3Skipped.length} / 10</p>
+                {p3Skipped.length > 0 && (
+                  <p className="text-xs text-red-600 font-medium">Skipped: Scenario {p3Skipped.join(', Scenario ')}</p>
+                )}
                 <div className="space-y-3">
                   {Object.entries(p3Profile.counts).map(([style, count]) => {
                     const percentage = p3Profile.totalSelections > 0 ? Math.round((count / p3Profile.totalSelections) * 100) : 0;
@@ -927,6 +954,10 @@
               {/* PART 4 SUMMARY */}
               <div className="bg-slate-50 p-5 rounded-lg border text-left space-y-4" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                 <h3 className="font-bold text-gray-800 border-b pb-2">Part 4: Interest Profile (Holland Codes)</h3>
+                <p className="text-xs text-gray-600">Completed items: {36 - p4Skipped.length} / 36</p>
+                {p4Skipped.length > 0 && (
+                  <p className="text-xs text-red-600 font-medium">Skipped: Q{p4Skipped.join(', Q')}</p>
+                )}
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {Object.entries(p4Totals).map(([cat, val]) => (
                     <div key={cat} className="p-3 bg-white border rounded text-center">
