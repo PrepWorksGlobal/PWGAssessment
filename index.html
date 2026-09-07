@@ -294,6 +294,10 @@
       const [part3SelfCheck, setPart3SelfCheck] = useState('');
       const [part4SelfCheck, setPart4SelfCheck] = useState('');
 
+      // Email fallback panel (shown in case mailto: silently fails — no default mail app registered)
+      const [showEmailFallback, setShowEmailFallback] = useState(false);
+      const [copyButtonLabel, setCopyButtonLabel] = useState('Copy message');
+
       useEffect(() => {
         const stored = JSON.parse(localStorage.getItem('prepworks_assessments') || '{}');
         setRecords(stored);
@@ -454,7 +458,22 @@
         const body = encodeURIComponent(
           `Hi,\n\nAttached is my assessment results report for review.\n\n[IMPORTANT: Please manually attach the PDF file (${name}_QuizResults.pdf) that you just downloaded before sending this email.]\n\nThank you,\n${name}`
         );
+        // Attempt to open the device's default mail app.
         window.location.href = `mailto:${COUNSELOR_EMAIL}?subject=${subject}&body=${body}`;
+        // Always show the fallback panel too — mailto: fails silently on devices
+        // with no default mail app registered, with no error to catch.
+        setShowEmailFallback(true);
+      };
+
+      const handleCopyEmailText = () => {
+        const name = studentName || "Student";
+        const text = `To: ${COUNSELOR_EMAIL}\nSubject: Quiz Results — ${name}\n\nHi,\n\nAttached is my assessment results report for review.\n\n[IMPORTANT: Please manually attach the PDF file (${name}_QuizResults.pdf) that you just downloaded before sending this email.]\n\nThank you,\n${name}`;
+        navigator.clipboard.writeText(text).then(() => {
+          setCopyButtonLabel('Copied!');
+          setTimeout(() => setCopyButtonLabel('Copy message'), 2000);
+        }).catch(() => {
+          setCopyButtonLabel('Copy failed — select text manually');
+        });
       };
 
       if (view === 'loading') return null;
@@ -955,6 +974,33 @@
                 Email My Results
               </button>
             </div>
+
+            {showEmailFallback && (
+              <div className="no-print mt-2 p-4 bg-amber-50 border border-amber-200 rounded-md text-left">
+                <p className="text-xs font-semibold text-amber-900 mb-2">
+                  If your email app didn't open, no problem — copy the message below and paste it into Gmail, Outlook, or whichever email service you use. Don't forget to attach the PDF you downloaded.
+                </p>
+                <div className="bg-white border rounded p-3 text-xs text-gray-700 whitespace-pre-wrap mb-2">
+{`To: ${COUNSELOR_EMAIL}
+Subject: Quiz Results — ${studentName || "Student"}
+
+Hi,
+
+Attached is my assessment results report for review.
+
+[IMPORTANT: Please manually attach the PDF file (${(studentName || "Student")}_QuizResults.pdf) that you just downloaded before sending this email.]
+
+Thank you,
+${studentName || "Student"}`}
+                </div>
+                <button
+                  onClick={handleCopyEmailText}
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-2 rounded"
+                >
+                  {copyButtonLabel}
+                </button>
+              </div>
+            )}
 
           </div>
         );
