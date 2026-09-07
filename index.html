@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PrepWorks Global - Assessment System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Added html2pdf.js via CDN for client-side PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    body { background-color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
+    @media print {
+      body { background-color: white; }
+      .no-print { display: none !important; }
+      .print-shadow-none { box-shadow: none !important; border: 1px solid #e5e7eb !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Placeholders - replace with your actual target email address
+    const COUNSELOR_EMAIL = "info@prepworksglobal.com";
+
+    // --- ASSESSMENT DATA STRUCTURES ---
+    const likertLabels = [
+      { num: 1, label: "Strongly Disagree" },
+      { num: 2, label: "Disagree" },
+      { num: 3, label: "Neutral" },
+      { num: 4, label: "Agree" },
+      { num: 5, label: "Strongly Agree" }
+    ];
+
+    const part4LikertLabels = [
+      { num: 1, label: "Strongly Dislike" },
+      { num: 2, label: "Dislike" },
+      { num: 3, label: "Unsure" },
+      { num: 4, label: "Like" },
+      { num: 5, label: "Strongly Like" }
+    ];
+
+    // PART 1: WORK STYLE (32 items)
+    const workStyleItems = [
+      { id: 1, text: "I feel more energised after a group discussion than after time spent alone.", explanation: "Do you feel pumped up after brainstorming a school project with your classmates, or do you prefer studying quietly in your room to recharge?", example: "Spider-Man Example: Think of Spider-Man getting hyped up while chatting and bouncing ideas with the Avengers, versus Peter Parker quietly recharging his energy alone in his bedroom." },
+      { id: 2, text: "I'm more interested in what something could become than in how it currently works.", explanation: "When given a science assignment, do you get excited dreaming up big creative ideas for the future, or do you focus on how things actually work right now?", example: "Spider-Man Example: Peter Parker dreaming up futuristic web tech that doesn't exist yet, compared to a garage mechanic fixing standard scooter engines." },
+      { id: 3, text: "When giving feedback, keeping the relationship comfortable matters as much as being accurate.", explanation: "If your friend makes a mistake on a group presentation slide, do you gently point it out to avoid hurting their feelings, or do you tell them straight to get the best marks?", example: "Spider-Man Example: Ned carefully softening his words so he doesn't upset Peter, versus J. Jonah Jameson shouting raw feedback without caring about anyone's feelings." },
+      { id: 4, text: "I prefer to keep my options open rather than commit to a plan early.", explanation: "When planning a weekend outing with school friends, do you like keeping plans flexible until the last minute, or deciding exact places and timings days in advance?", example: "Spider-Man Example: Spider-Man improvising his path through city streets on the fly, versus Tony Stark setting strict flight schedules before launching." },
+      { id: 5, text: "In a new class, I usually wait to be approached rather than introduce myself first.", explanation: "On the first day of tuition class, do you sit quietly waiting for someone to talk to you, or do you walk up and introduce yourself to new people?", example: "Spider-Man Example: Quiet Peter Parker waiting in the classroom corner for someone to say hello, versus Flash Thompson loudly greeting everyone the second he enters." },
+      { id: 6, text: "I trust concrete facts and past experience more than a hunch.", explanation: "When solving a tricky math problem, do you rely strictly on formulas you've practiced before, or do you trust a gut feeling about the answer?", example: "Spider-Man Example: Aunt May sticking to her trusted traditional family recipe, versus Mysterio trusting wild visual illusions." },
+      { id: 7, text: "I make decisions primarily on logic, even if it's unpopular.", explanation: "When dividing work for a school assignment, do you assign roles based strictly on who is best at the job, even if your close friends get upset?", example: "Spider-Man Example: Doctor Strange sticking strictly to the logical decision to save the universe, even when Peter emotionally disagrees." },
+      { id: 8, text: "I like finishing a task well before the deadline.", explanation: "Do you submit project reports days before the due date, or are you pulling an all-nighter right before the submission hour?", example: "Spider-Man Example: Mary Jane finishing her play rehearsal scripts weeks early, versus Peter Parker rushing his homework minutes before class starts." },
+      { id: 9, text: "I do my best thinking out loud, in conversation with others.", explanation: "When trying to solve a tough question, do you need to talk it out with a classmate, or do you sit silently and work through it in your head?", example: "Spider-Man Example: Spider-Man talking out loud with Ned while fixing his suit, versus sitting alone in complete silence." },
+      { id: 10, text: "I often notice patterns or connections that others miss.", explanation: "While analyzing a case study or story in class, do you pick up on small hidden connections between ideas that your friends didn't spot?", example: "Spider-Man Example: Peter Parker noticing tiny web vibrations and hidden clues that even experienced police officers walk right past." },
+      { id: 11, text: "I notice when someone in the room is uncomfortable, even if they haven't said anything.", explanation: "During a group discussion, can you instantly sense if a teammate is feeling left out or upset just by looking at their face?", example: "Spider-Man Example: Gwen Stacy realizing Peter is stressed about something just by reading his face before he says a word." },
+      { id: 12, text: "Unstructured, open-ended situations energise me rather than stress me.", explanation: "If a teacher says 'create any project you want' with no fixed rules, do you feel excited or do you get stressed out needing clear guidelines?", example: "Spider-Man Example: Miles Morales loving the freedom of a blank wall to draw artwork, versus a student needing exact textbook instructions." },
+      { id: 13, text: "After a long day of meetings or classes, I'd rather unwind alone than with a group.", explanation: "After a long, tiring day of school and back-to-back tuition, do you want to relax by watching a show alone or by hanging out with friends?", example: "Spider-Man Example: Peter Parker retreating to his quiet room to tinker with his suit after a chaotic day at school." },
+      { id: 14, text: "When learning something new, I want the step-by-step process before the big picture.", explanation: "When learning a new software tool or lab experiment, do you want clear 1-2-3 steps first, or do you want to understand the end result first?", example: "Spider-Man Example: Ned wanting clear step-by-step instructions before hacking the suit, versus Peter jumping right to seeing the final suit abilities." },
+      { id: 15, text: "I'd rather be respected for being right than liked for being kind.", explanation: "In a class debate, is it more important to you to state the exact correct facts, or to make sure everyone feels valued and respected?", example: "Spider-Man Example: Otto Octavius caring only about scientific accuracy above personal feelings, versus Aunt May prioritizing warmth and kindness." },
+      { id: 16, text: "I make to-do lists and feel uneasy when I fall behind on them.", explanation: "Do you write daily study schedules and feel bothered if you miss a task, or do you prefer studying whatever subject you feel like at the moment?", example: "Spider-Man Example: Happy Hogan maintaining strict digital checklists for every task, versus Spider-Man managing things as they come up." },
+      { id: 17, text: "I'd rather work through a problem by talking it out with someone than by writing it down first.", explanation: "When stuck on an essay topic, do you prefer calling a friend to chat about ideas, or opening a notebook to write outline notes alone?", example: "Spider-Man Example: Peter calling Happy Hogan to talk through a problem out loud instead of writing out a long report." },
+      { id: 18, text: "I enjoy speculating about future possibilities more than discussing present realities.", explanation: "Do you prefer talking with friends about where technology will be in 10 years, or discussing current exam scores and daily news?", example: "Spider-Man Example: Green Goblin talking about future possibilities of human technology, versus local officers focusing on everyday street news." },
+      { id: 19, text: "Harmony in a group matters more to me than winning an argument.", explanation: "If your project team disagrees on an idea, would you rather let someone else have their way to keep peace, or debate until your idea wins?", example: "Spider-Man Example: Ned trying to calm everyone down so the study group stays happy, versus arguing to win the point." },
+      { id: 20, text: "I tend to start several things and figure out priority as I go.", explanation: "When studying for exams, do you open three subjects at once and jump between them, or do you finish one subject completely before starting the next?", example: "Spider-Man Example: Peter having his homework, web-shooter gadgets, and suit repairs spread across his desk all at once." },
+      { id: 21, text: "Large networking events feel draining to me more than exciting.", explanation: "Does attending a big school cultural event with hundreds of students exhaust you, or does it make you feel lively and energetic?", example: "Spider-Man Example: Peter feeling overwhelmed and drained in a crowded party room, preferring quiet time with MJ." },
+      { id: 22, text: "I prefer instructions that are precise and literal over ones that are open to interpretation.", explanation: "Do you prefer teachers who give exact word-for-word guidelines for assignments, or teachers who let you interpret the project your own way?", example: "Spider-Man Example: Dr. Connors requiring exact laboratory measurements down to the milligram, versus flexible guidelines." },
+      { id: 23, text: "Fairness, to me, means applying the same rule to everyone regardless of circumstance.", explanation: "If a classmate turns in homework late, should everyone get the exact same penalty, or should the teacher make exceptions based on personal reasons?", example: "Spider-Man Example: Police Captain Stacy insisting rules apply equally to all citizens, versus Spider-Man making quick exceptions in emergencies." },
+      { id: 24, text: "I prefer a detailed itinerary over a loose plan when travelling.", explanation: "When going on a school picnic or trip, do you like having a written schedule for every hour, or just deciding what to do after arriving?", example: "Spider-Man Example: Mr. Harrington making a detailed time-by-time plan for the school trip to Europe, versus just wandering around freely." },
+      { id: 25, text: "I speak up in group settings without needing to rehearse what I'll say first.", explanation: "When the teacher asks a question in class, do you raise your hand and answer instantly, or do you mentally practice your sentence first?", example: "Spider-Man Example: Spider-Man making quick, funny remarks on the spot without thinking twice, versus Peter Parker rehearsing what to say in front of a mirror." },
+      { id: 26, text: "I get bored explaining or working through routine, repetitive details.", explanation: "Does filling out repetitive lab record sheets make you feel bored, making you want to move on to interesting new problems?", example: "Spider-Man Example: Peter getting restless doing simple photo filing work at the office, wanting to go out swinging in the city instead." },
+      { id: 27, text: "I factor in how a decision will make people feel, not just whether it's correct.", explanation: "When picking a group leader, do you choose someone who makes everyone feel included, or purely whoever has the highest marks?", example: "Spider-Man Example: Aunt May deciding to help shelter residents based on how much joy it brings them, not just cold practical logic." },
+      { id: 28, text: "Last-minute changes don't bother me much I adapt easily.", explanation: "If your exam timetable or class location suddenly changes an hour before, can you smoothly adapt without feeling flustered?", example: "Spider-Man Example: Spider-Man switching his plans instantly when a unexpected situation pops up on his way to school." },
+      { id: 29, text: "I prefer communicating by writing (email, chat) over speaking in real time.", explanation: "When discussing project work with classmates, do you prefer typing in a WhatsApp group, or calling them on the phone?", example: "Spider-Man Example: Peter texting Happy quick updates on his phone instead of calling him directly." },
+      { id: 30, text: "I'd rather refine something proven than invent something new.", explanation: "In a science project, would you rather take an existing popular experiment and make it better, or try inventing something totally unproven?", example: "Spider-Man Example: Tinkerer taking existing tech gadgets and upgrading them, instead of inventing a new science element from scratch." },
+      { id: 31, text: "I find it easy to separate a critique of someone's work from a critique of them personally.", explanation: "If a teacher points out mistakes on your test paper, do you view it as helpful guidance on your work without feeling personally attacked?", example: "Spider-Man Example: MJ pointing out photo framing mistakes to Peter in a friendly way without making him feel bad as a person." },
+      { id: 32, text: "Closing out decisions quickly, even imperfectly, feels better to me than leaving them open.", explanation: "When picking a topic for a seminar, do you like making a quick decision so you can start, or do you take days weighing options?", example: "Spider-Man Example: J. Jonah Jameson picking a newspaper headline immediately to meet the printing deadline, rather than waiting longer." }
+    ];
+
+    // PART 2: GRIT (10 items)
+    const gritItems = [
+      { id: 1, text: "I finish whatever I begin, even when it becomes difficult.", explanation: "When a math problem set or revision module gets really tough, do you push through to the end or set it aside?", example: "Spider-Man Example: Spider-Man pushing with all his strength to lift heavy rubble off himself when everything feels impossible." },
+      { id: 2, text: "My interests change from year to year.", explanation: "Do your favorite hobbies or subject interests change every academic year, or have you loved the same things for years?", example: "Spider-Man Example: Flash changing his favorite sports and hobbies every term, versus Peter staying passionate about science for years." },
+      { id: 3, text: "I am a hard worker.", explanation: "Do you put continuous effort into your daily studies and responsibilities without needing someone to constantly remind you?", example: "Spider-Man Example: Peter balancing school, studying for exams, working a part-time job, and doing superhero duties all together." },
+      { id: 4, text: "I often start something new before finishing what I was working on before.", explanation: "Do you leave one notebook half-filled or one assignment half-done because a new interesting idea caught your attention?", example: "Spider-Man Example: Putting down a half-built science project because a cool new gadget idea suddenly popped into your head." },
+      { id: 5, text: "Setbacks don't stop me from pursuing a goal I care about.", explanation: "If you get low marks on a unit test, does it motivate you to work harder for the finals rather than feeling like giving up?", example: "Spider-Man Example: Falling down during web-swinging practice, but dusting off your knees and trying again until you master it." },
+      { id: 6, text: "I get diverted by new projects before completing old ones.", explanation: "Do you get easily distracted by new ideas or activities before completing the tasks you originally planned?", example: "Spider-Man Example: Starting to build a brand-new suit model before finishing repairing your web-shooters from yesterday." },
+      { id: 7, text: "I work through obstacles rather than giving up and going around them.", explanation: "When facing a difficult concept in physics, do you wrestle with the chapter until you understand it, or skip it completely?", example: "Spider-Man Example: Working line-by-line to crack a hard computer code instead of closing the laptop when stuck." },
+      { id: 8, text: "I've been very focused on an idea for a short time, then lost interest in it.", explanation: "Have you ever gotten super excited about a new hobby (like playing guitar or coding) for two weeks, and then completely dropped it?", example: "Spider-Man Example: Getting super passionate about photography for two weeks, then leaving the camera on the shelf." },
+      { id: 9, text: "Once I commit to something, I follow through.", explanation: "If you promise your group to finish your share of project slides by Sunday evening, do you always deliver on time?", example: "Spider-Man Example: Promising Aunt May you will be back in time for dinner and doing whatever it takes to keep that promise." },
+      { id: 10, text: "New goals often replace old ones for me before the old ones are complete.", explanation: "Do your academic or personal targets frequently shift before you achieve your original goals?", example: "Spider-Man Example: Switching from aiming for the science quiz team to trying out for the basketball team halfway through." }
+    ];
+
+    // PART 3: LEARNING APPROACH (10 scenarios)
+    const learningApproachItems = [
+      {
+        id: 1,
+        scenario: "1. Learning new software:",
+        explanation: "How do you naturally pick up a new computer program or mobile app?",
+        example: "Spider-Man Example: Watching a video demo vs. having Ned explain it to you out loud vs. reading step-by-step instructions vs. tapping around on the screen to learn by doing.",
+        options: [
+          { code: 'a', label: "Watch a demo video", type: "Visual" },
+          { code: 'b', label: "Have someone explain it out loud", type: "Aural" },
+          { code: 'c', label: "Read the manual/instructions", type: "Read/Write" },
+          { code: 'd', label: "Start clicking around and figure it out", type: "Kinesthetic" }
+        ]
+      },
+      {
+        id: 2,
+        scenario: "2. Remembering directions to a new place:",
+        explanation: "When navigating to a new tuition center or friend's house, what helps you remember the route best?",
+        example: "Spider-Man Example: Picturing the street map in your head vs. listening to voice directions vs. writing street names on paper vs. traveling the path once to feel the way.",
+        options: [
+          { code: 'a', label: "Picture the route in your head", type: "Visual" },
+          { code: 'b', label: "Ask someone to describe it or say it aloud to yourself", type: "Aural" },
+          { code: 'c', label: "Write down the steps", type: "Read/Write" },
+          { code: 'd', label: "Just start walking/driving and adjust", type: "Kinesthetic" }
+        ]
+      },
+      {
+        id: 3,
+        scenario: "3. In a lecture, you learn best when the professor:",
+        explanation: "What teaching style in school helps concepts stick in your mind easily?",
+        example: "Spider-Man Example: Looking at colorful blackboard diagrams vs. listening to energetic explanation talks vs. reading detailed textbook notes vs. doing a practical lab experiment.",
+        options: [
+          { code: 'a', label: "Uses diagrams/slides", type: "Visual" },
+          { code: 'b', label: "Leads discussion and explains verbally", type: "Aural" },
+          { code: 'c', label: "Provides detailed notes and readings", type: "Read/Write" },
+          { code: 'd', label: "Runs a hands-on activity or case exercise", type: "Kinesthetic" }
+        ]
+      },
+      {
+        id: 4,
+        scenario: "4. Preparing for an exam:",
+        explanation: "What is your go-to revision routine when preparing for board exams or midterms?",
+        example: "Spider-Man Example: Drawing flowcharts and mind-maps vs. quizzing your classmate out loud vs. rewriting key points in a notebook vs. solving previous years' question papers.",
+        options: [
+          { code: 'a', label: "Redraw charts/mind-maps from memory", type: "Visual" },
+          { code: 'b', label: "Talk through the material with a study partner", type: "Aural" },
+          { code: 'c', label: "Rewrite your notes", type: "Read/Write" },
+          { code: 'd', label: "Work through practice problems repeatedly", type: "Kinesthetic" }
+        ]
+      },
+      {
+        id: 5,
+        scenario: "5. Assembling furniture or a new gadget:",
+        explanation: "When unboxing a new study table or gadget at home, how do you put it together?",
+        example: "Spider-Man Example: Looking at picture diagrams vs. asking a family member to guide you vs. reading the user booklet fully vs. grabbing tools and building directly.",
+        options: [
+          { code: 'a', label: "Look at the diagram first", type: "Visual" },
+          { code: 'b', label: "Call someone who's done it before and ask", type: "Aural" },
+          { code: 'c', label: "Read the instruction booklet fully first", type: "Read/Write" },
+          { code: 'd', label: "Start assembling and check instructions only when stuck", type: "Kinesthetic" }
+        ]
+      },
+      {
+        id: 6,
+        scenario: "6. Understanding a company's performance:",
+        explanation: "How do you prefer to digest business data or report results?",
+        example: "Spider-Man Example: Looking at pie charts and graphs vs. hearing a verbal summary vs. reading the written report vs. creating your own calculation sheet.",
+        options: [
+          { code: 'a', label: "Look at the chart/graph", type: "Visual" },
+          { code: 'b', label: "Listen to someone summarize it", type: "Aural" },
+          { code: 'c', label: "Read the report in detail", type: "Read/Write" },
+          { code: 'd', label: "Build your own spreadsheet from the raw numbers", type: "Kinesthetic" }
+        ]
+      },
+      {
+        id: 7,
+        scenario: "7. Explaining a concept to a friend:",
+        explanation: "When helping a friend understand a tricky topic before an exam, how do you explain it?",
+        example: "Spider-Man Example: Drawing a diagram on a rough page vs. explaining it verbally vs. writing down formulas for them vs. using real physical objects to demonstrate.",
+        options: [
+          { code: 'a', label: "Draw it out", type: "Visual" },
+          { code: 'b', label: "Just talk them through it", type: "Aural" },
+          { code: 'c', label: "Send them something written", type: "Read/Write" },
+          { code: 'd', label: "Show them with a real example or object", type: "Kinesthetic" }
+        ]
+      },
+      {
+        id: 8,
+        scenario: "8. Your ideal way to receive feedback on a piece of work:",
+        explanation: "How do you like teachers or mentors to correct your project work?",
+        example: "Spider-Man Example: Seeing red markings on paper vs. having a one-on-one talk vs. reading written review notes vs. sitting together to fix the project live.",
+        options: [
+          { code: 'a', label: "Annotated/marked-up copy", type: "Visual" },
+          { code: 'b', label: "A verbal conversation", type: "Aural" },
+          { code: 'c', label: "Written comments/report", type: "Read/Write" },
+          { code: 'd', label: "Redo it together, live", type: "Kinesthetic" }
+        ]
+      },
+      {
+        id: 9,
+        scenario: "9. Recalling a case study weeks later, you remember:",
+        explanation: "When remembering a lesson taught last month, what pops into your head first?",
+        example: "Spider-Man Example: The picture shown on the screen vs. a memorable line spoken by the teacher vs. the notes in your binder vs. the activity you participated in.",
+        options: [
+          { code: 'a', label: "The chart or image that was shown", type: "Visual" },
+          { code: 'b', label: "A comment someone made", type: "Aural" },
+          { code: 'c', label: "A phrase you wrote down", type: "Read/Write" },
+          { code: 'd', label: "What you personally did or built during it", type: "Kinesthetic" }
+        ]
+      },
+      {
+        id: 10,
+        scenario: "10. When stuck on a problem, your first instinct is to:",
+        explanation: "When you run into a roadblock in an assignment, what is your first reaction?",
+        example: "Spider-Man Example: Doodling a diagram vs. calling a study buddy to talk vs. re-reading textbook chapters vs. trying out different answers to see what works.",
+        options: [
+          { code: 'a', label: "Sketch it out", type: "Visual" },
+          { code: 'b', label: "Talk it through with someone", type: "Aural" },
+          { code: 'c', label: "Reread the source material", type: "Read/Write" },
+          { code: 'd', label: "Try something and see what happens", type: "Kinesthetic" }
+        ]
+      }
+    ];
+
+    // PART 4: INTEREST PROFILE (36 items)
+    const interestProfileItems = [
+      { id: 1, text: "Repair or troubleshoot a piece of equipment or machinery.", category: "Realistic", explanation: "Do you enjoy fixing broken bicycles, gadgets, or household appliances?", example: "Spider-Man Example: Tinkering with broken web-shooter parts using screwdrivers in your bedroom." },
+      { id: 2, text: "Work outdoors or on a physical, hands-on task.", category: "Realistic", explanation: "Do you prefer active tasks outside over sitting at a desk all day?", example: "Spider-Man Example: Swinging outdoors across city buildings rather than sitting inside an office." },
+      { id: 3, text: "Build or assemble something using tools.", category: "Realistic", explanation: "Do you like crafting or building models with physical tools?", example: "Spider-Man Example: Assembling a custom mini-drone using soldering tools and wire cutters." },
+      { id: 4, text: "Operate or maintain vehicles, machines, or technical systems.", category: "Realistic", explanation: "Do you like managing computer hardware, scooters, or mechanical gear?", example: "Spider-Man Example: Operating and fine-tuning the technical systems inside Stark jet vehicles." },
+      { id: 5, text: "Work with materials like wood, metal, or electronics directly.", category: "Realistic", explanation: "Do you like working with hands-on materials in science or craft labs?", example: "Spider-Man Example: Mixing chemical liquids directly in test tubes to make web fluid." },
+      { id: 6, text: "Follow a process to physically construct or fix something.", category: "Realistic", explanation: "Do you enjoy step-by-step physical repair or building projects?", example: "Spider-Man Example: Following repair steps to restore damaged suit armor pieces." },
+      
+      { id: 7, text: "Investigate the cause of a problem before acting on it.", category: "Investigative", explanation: "Do you like figuring out the root cause of a problem before acting?", example: "Spider-Man Example: Examining mystery clue samples under a microscope before confronting villains." },
+      { id: 8, text: "Analyse data to find a pattern or explanation.", category: "Investigative", explanation: "Do you enjoy looking at data tables or marks trends to find patterns?", example: "Spider-Man Example: Checking city crime patterns to predict where to patrol next." },
+      { id: 9, text: "Read research or technical material on a topic that interests you.", category: "Investigative", explanation: "Do you like reading deep science articles or tech blogs for fun?", example: "Spider-Man Example: Reading advanced science articles late into the night." },
+      { id: 10, text: "Work on a puzzle or problem with no obvious answer.", category: "Investigative", explanation: "Do you enjoy riddles, brain teasers, or tough math puzzles?", example: "Spider-Man Example: Solving complex math and physics puzzles during free study hours." },
+      { id: 11, text: "Design an experiment or test to answer a question.", category: "Investigative", explanation: "Do you like setting up experiments to test if an idea works?", example: "Spider-Man Example: Testing web fluid strength under hot and cold water in the school chemistry lab." },
+      { id: 12, text: "Study how something works at a deeper, technical level.", category: "Investigative", explanation: "Do you like taking things apart just to see how internal parts function?", example: "Spider-Man Example: Taking apart advanced gadgets to understand their internal chip designs." },
+
+      { id: 13, text: "Design something original — a visual, a write-up, a pitch, a product concept.", category: "Artistic", explanation: "Do you like creating fresh art, posters, or creative project concepts?", example: "Spider-Man Example: Designing the chest symbol and color combinations for a new Spider-suit." },
+      { id: 14, text: "Work in a role with few fixed rules about how the output should look.", category: "Artistic", explanation: "Do you like creative freedom where you decide how the final work looks?", example: "Spider-Man Example: Miles Morales painting custom wall art with zero rigid guidelines." },
+      { id: 15, text: "Create content — writing, design, video, or presentation — from scratch.", category: "Artistic", explanation: "Do you like making videos, blog posts, or slides from scratch?", example: "Spider-Man Example: Editing together action video clips for a school presentation." },
+      { id: 16, text: "Come up with an unconventional solution rather than following a template.", category: "Artistic", explanation: "Do you like inventing unique workarounds when standard ways don't work?", example: "Spider-Man Example: Using web fluid in creative unexpected ways during a crisis." },
+      { id: 17, text: "Work on a project where creative expression matters as much as function.", category: "Artistic", explanation: "Do you care about making project work look stylish and creative?", example: "Spider-Man Example: Making sure suit design looks cool while remaining durable." },
+      { id: 18, text: "Improvise or adapt an approach on the fly rather than follow a script.", category: "Artistic", explanation: "Do you like thinking on your feet during presentations or debates?", example: "Spider-Man Example: Making up witty jokes on the spot during a game or fight." },
+
+      { id: 19, text: "Teach, coach, or mentor someone through a skill or problem.", category: "Social", explanation: "Do you enjoy helping junior students or classmates understand tough lessons?", example: "Spider-Man Example: Peter teaching Miles Morales how to swing safely across buildings." },
+      { id: 20, text: "Resolve a conflict or disagreement between two people.", category: "Social", explanation: "Do you naturally step in to help friends resolve petty arguments?", example: "Spider-Man Example: Helping Ned and Harry talk out a disagreement peacefully." },
+      { id: 21, text: "Spend most of your working day directly helping or advising people.", category: "Social", explanation: "Do you find fulfillment in guiding and helping people every day?", example: "Spider-Man Example: Volunteering at community centers to guide people in need." },
+      { id: 22, text: "Organise a group activity or event for others.", category: "Social", explanation: "Do you like planning class parties, games, or group study sessions?", example: "Spider-Man Example: Organizing the school quiz team trip to another city." },
+      { id: 23, text: "Counsel or support someone going through a difficult situation.", category: "Social", explanation: "Do friends come to you for personal advice when feeling low?", example: "Spider-Man Example: Sitting with a friend to comfort them after a rough day." },
+      { id: 24, text: "Lead a discussion or facilitate a group conversation.", category: "Social", explanation: "Do you like moderating group discussions or leading team meetings?", example: "Spider-Man Example: Leading the science club discussion before an event." },
+
+      { id: 25, text: "Pitch an idea and persuade others to back it.", category: "Enterprising", explanation: "Do you enjoy convincing classmates or teachers to support your ideas?", example: "Spider-Man Example: Convincing Tony Stark to give you a chance on the main team." },
+      { id: 26, text: "Take the lead on a project with real ownership over the outcome.", category: "Enterprising", explanation: "Do you like taking charge as group leader for major assignments?", example: "Spider-Man Example: Taking full responsibility for leading a high-stakes school project." },
+      { id: 27, text: "Negotiate a deal or a difficult conversation.", category: "Enterprising", explanation: "Do you enjoy bargaining or negotiating solutions where both sides win?", example: "Spider-Man Example: Negotiating photo prices with Jameson for the school paper." },
+      { id: 28, text: "Start or run your own venture or initiative.", category: "Enterprising", explanation: "Do you dream of starting your own club, business, or project?", example: "Spider-Man Example: Launching your own tech startup initiative with friends." },
+      { id: 29, text: "Compete for a target, a client, or a result.", category: "Enterprising", explanation: "Does competing for top ranks or sports prizes energize you?", example: "Spider-Man Example: Competing hard against rival schools to win 1st place in the Science Fair." },
+      { id: 30, text: "Convince a sceptical audience to change their mind.", category: "Enterprising", explanation: "Do you enjoy persuading people who initially disagree with you?", example: "Spider-Man Example: Giving a speech to convince classmates to support your campaign." },
+
+      { id: 31, text: "Organise and maintain accurate records or files.", category: "Conventional", explanation: "Do you like keeping organized files, folder labels, and neat notes?", example: "Spider-Man Example: Arranging school photos and notes neatly into digital folders." },
+      { id: 32, text: "Follow a clear, established process from start to finish.", category: "Conventional", explanation: "Do you like following reliable, set routines for your daily work?", example: "Spider-Man Example: Following strict lab safety steps when handling chemistry materials." },
+      { id: 33, text: "Check work carefully for errors or inconsistencies.", category: "Conventional", explanation: "Do you carefully double-check your exam papers for small mistakes?", example: "Spider-Man Example: Proofreading your final assignment three times before handing it in." },
+      { id: 34, text: "Work with numbers, spreadsheets, or structured data entry.", category: "Conventional", explanation: "Do you like working with structured numbers, budgets, or tables?", example: "Spider-Man Example: Tracking project expenses and budgets in an Excel sheet." },
+      { id: 35, text: "Keep a schedule, budget, or set of accounts on track.", category: "Conventional", explanation: "Do you like managing your monthly pocket money or study schedules?", example: "Spider-Man Example: Keeping track of daily pocket money expenses and study hours." },
+      { id: 36, text: "Work in a role with clearly defined rules and procedures.", category: "Conventional", explanation: "Do you prefer environments where rules and expectations are crystal clear?", example: "Spider-Man Example: Working as a library assistant following clear cataloging rules." }
+    ];
+
+    // --- MAIN APP COMPONENT ---
+    function MainApp() {
+      const [view, setView] = useState('loading');
+      const [studentName, setStudentName] = useState('');
+      const [errorMessage, setErrorMessage] = useState('');
+      
+      // Admin States
+      const [newStudentName, setNewStudentName] = useState('');
+      const [netlifyDomain, setNetlifyDomain] = useState('');
+      const [records, setRecords] = useState({});
+
+      // Explanation toggle state
+      const [openExplanations, setOpenExplanations] = useState({});
+
+      const toggleExplanation = (key) => {
+        setOpenExplanations(prev => ({ ...prev, [key]: !prev[key] }));
+      };
+
+      // Response States
+      const [part1Responses, setPart1Responses] = useState({});
+      const [part2Responses, setPart2Responses] = useState({});
+      const [part3Responses, setPart3Responses] = useState({});
+      const [part4Responses, setPart4Responses] = useState({});
+
+      // Self-check text responses
+      const [part1SelfCheck, setPart1SelfCheck] = useState('');
+      const [part2SelfCheck, setPart2SelfCheck] = useState('');
+      const [part3SelfCheck, setPart3SelfCheck] = useState('');
+      const [part4SelfCheck, setPart4SelfCheck] = useState('');
+
+      useEffect(() => {
+        const stored = JSON.parse(localStorage.getItem('prepworks_assessments') || '{}');
+        setRecords(stored);
+
+        const savedDomain = localStorage.getItem('prepworks_netlify_domain') || '';
+        setNetlifyDomain(savedDomain);
+
+        const params = new URLSearchParams(window.location.search);
+        const nameParam = params.get('name');
+
+        if (nameParam) {
+          // Name travels inside the link itself, so this works on ANY device —
+          // no dependency on localStorage records existing on the student's browser.
+          setStudentName(decodeURIComponent(nameParam));
+          setView('intro');
+        } else {
+          setView('admin');
+        }
+      }, []);
+
+      const saveDomain = (e) => {
+        const val = e.target.value;
+        setNetlifyDomain(val);
+        localStorage.setItem('prepworks_netlify_domain', val);
+      };
+
+      const generateLink = () => {
+        if (!newStudentName.trim()) return alert("Please enter a student name");
+        const token = Math.random().toString(36).substring(2, 10);
+        const updated = {
+          ...records,
+          [token]: {
+            name: newStudentName,
+            status: 'pending',
+            createdAt: new Date().toLocaleDateString()
+          }
+        };
+        setRecords(updated);
+        localStorage.setItem('prepworks_assessments', JSON.stringify(updated));
+        setNewStudentName('');
+      };
+
+      const togglePart3Option = (scenarioId, code) => {
+        const current = part3Responses[scenarioId] || [];
+        const updated = current.includes(code)
+          ? current.filter((c) => c !== code)
+          : [...current, code];
+
+        setPart3Responses({ ...part3Responses, [scenarioId]: updated });
+      };
+
+      // --- SCORING CALCULATORS ---
+      const calculateWorkStyleScore = (responses) => {
+        let total = 0;
+        let count = 0;
+        Object.values(responses).forEach(val => { total += val; count++; });
+        const avg = count > 0 ? (total / count).toFixed(1) : "N/A";
+        return { avg, count };
+      };
+
+      const calculateGritScore = (responses) => {
+        let total = 0;
+        let count = 0;
+        const reverseItems = [2, 4, 6, 8, 10];
+        for (let i = 1; i <= 10; i++) {
+          if (responses[i]) {
+            count++;
+            if (reverseItems.includes(i)) {
+              total += (6 - responses[i]);
+            } else {
+              total += responses[i];
+            }
+          }
+        }
+        const score = count > 0 ? (total / count).toFixed(2) : "N/A";
+        return { score, count };
+      };
+
+      const calculateLearningProfile = (responses) => {
+        const counts = { Visual: 0, Aural: 0, "Read/Write": 0, Kinesthetic: 0 };
+        let totalSelections = 0;
+
+        learningApproachItems.forEach((item) => {
+          const selectedCodes = responses[item.id] || [];
+          selectedCodes.forEach((code) => {
+            const match = item.options.find((opt) => opt.code === code);
+            if (match) {
+              counts[match.type] = (counts[match.type] || 0) + 1;
+              totalSelections++;
+            }
+          });
+        });
+
+        return { counts, totalSelections };
+      };
+
+      const calculateInterestProfile = (responses) => {
+        const totals = { Realistic: 0, Investigative: 0, Artistic: 0, Social: 0, Enterprising: 0, Conventional: 0 };
+        interestProfileItems.forEach(item => {
+          if (responses[item.id]) {
+            totals[item.category] += responses[item.id];
+          }
+        });
+        return totals;
+      };
+
+      const submitAssessment = () => {
+        setView('summary');
+      };
+
+      const getFullUrl = (name) => {
+        let baseUrl = netlifyDomain.trim();
+        if (!baseUrl) {
+          baseUrl = window.location.href.split('?')[0];
+        } else {
+          if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+            baseUrl = 'https://' + baseUrl;
+          }
+          if (baseUrl.endsWith('/')) {
+            baseUrl = baseUrl.slice(0, -1);
+          }
+        }
+        return `${baseUrl}?name=${encodeURIComponent(name)}`;
+      };
+
+      const getEmailLink = (name) => {
+        const link = getFullUrl(name);
+        const subject = encodeURIComponent(`PrepWorks Global - Profile Assessment Link for ${name}`);
+        const body = encodeURIComponent(
+          `Hi ${name},\n\nPlease complete your student profile assessment using your personalized link below:\n\n${link}\n\nInstructions:\n1. Click the link above to complete the assessment.\n2. Once finished, click "Download My Results" on the summary screen.\n3. Reply to this email and attach the saved PDF report for our upcoming counseling session.\n\nBest regards,\nPrepWorks Global`
+        );
+        return `mailto:?subject=${subject}&body=${body}`;
+      };
+
+      // Client-side PDF Generation Function
+      const handleDownloadPDF = () => {
+        const element = document.getElementById('pdf-report-content');
+        if (!element) return;
+
+        const sanitizedName = (studentName || "Student").replace(/[^a-zA-Z0-9]/g, "_");
+        const filename = `${sanitizedName}_QuizResults.pdf`;
+
+        const opt = {
+          margin: 0.5,
+          filename: filename,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+
+        html2pdf().set(opt).from(element).save();
+      };
+
+      // Client-side Mailto Generator Function
+      const handleEmailResults = () => {
+        const name = studentName || "Student";
+        const subject = encodeURIComponent(`Quiz Results — ${name}`);
+        const body = encodeURIComponent(
+          `Hi,\n\nAttached is my assessment results report for review.\n\n[IMPORTANT: Please manually attach the PDF file (${name}_QuizResults.pdf) that you just downloaded before sending this email.]\n\nThank you,\n${name}`
+        );
+        window.location.href = `mailto:${COUNSELOR_EMAIL}?subject=${subject}&body=${body}`;
+      };
+
+      if (view === 'loading') return null;
+
+      if (view === 'error') {
+        return (
+          <div className="max-w-md mx-auto mt-20 p-6 bg-red-50 border border-red-200 rounded-lg text-center">
+            <h2 className="text-xl font-bold text-red-700 mb-2">Access Restricted</h2>
+            <p className="text-red-600 text-sm">{errorMessage}</p>
+          </div>
+        );
+      }
+
+      if (view === 'admin') {
+        return (
+          <div className="max-w-4xl mx-auto p-4 md:p-8">
+            <header className="bg-white p-6 rounded-lg shadow-sm border mb-6">
+              <h1 className="text-2xl font-bold text-gray-800">PrepWorks Global — Admin Portal</h1>
+              <p className="text-sm text-gray-500">Generate and manage single-use student assessment links</p>
+            </header>
+
+            {/* Netlify Domain Settings Section */}
+            <div className="bg-blue-50 border border-blue-200 p-6 rounded-lg shadow-sm mb-6">
+              <h2 className="text-md font-bold text-blue-900 mb-1">🌐 Website Domain Config</h2>
+              <p className="text-xs text-blue-700 mb-3">Paste your hosted site URL here (e.g. your GitHub Pages link) so generated links open correctly for students everywhere on the web.</p>
+              <input
+                type="text"
+                placeholder="e.g. https://yourusername.github.io/your-repo-name"
+                value={netlifyDomain}
+                onChange={saveDomain}
+                className="w-full p-2 border border-blue-300 rounded-md text-sm bg-white"
+              />
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border mb-6">
+              <h2 className="text-lg font-bold mb-3">Create New Assessment Link</h2>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Enter Student Full Name"
+                  value={newStudentName}
+                  onChange={(e) => setNewStudentName(e.target.value)}
+                  className="flex-1 p-2 border rounded-md text-sm"
+                />
+                <button onClick={generateLink} className="bg-blue-600 text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-blue-700">
+                  Generate Link
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border">
+              <h2 className="text-lg font-bold mb-3">Student Assessment Links</h2>
+              {Object.keys(records).length === 0 ? (
+                <p className="text-gray-500 text-sm">No links generated yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {Object.entries(records).map(([token, item]) => (
+                    <div key={token} className="p-3 border rounded-md flex flex-col md:flex-row md:items-center justify-between gap-2 bg-gray-50">
+                      <div>
+                        <div className="font-bold text-gray-800">{item.name}</div>
+                        <div className="text-xs text-gray-500">Status: 
+                          <span className={`ml-1 font-semibold ${item.status === 'completed' ? 'text-green-600' : 'text-amber-600'}`}>
+                            {item.status}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {item.status === 'pending' ? (
+                          <>
+                            <a
+                              href={getEmailLink(item.name)}
+                              className="bg-blue-600 text-white text-xs px-3 py-2 rounded font-medium hover:bg-blue-700 flex items-center gap-1"
+                            >
+                              📧 Email to Student
+                            </a>
+                            <a
+                              href={getFullUrl(item.name)}
+                              target="_blank"
+                              className="bg-gray-200 text-gray-700 text-xs px-3 py-2 rounded font-medium hover:bg-gray-300"
+                            >
+                              ▶ Open Link
+                            </a>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Completed</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'intro') {
+        return (
+          <div className="max-w-2xl mx-auto mt-10 p-6 bg-white rounded-lg shadow-sm border">
+            <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome, {studentName}!</h1>
+            <p className="text-gray-600 mb-6 text-sm">You have been invited to complete your profile assessment. Every single question across all sections features a 💡 <strong>Explain the Question</strong> button with a Spider-Man movie example to help you understand!</p>
+            <button
+              onClick={() => setView('assessment')}
+              className="w-full bg-blue-600 text-white py-3 rounded-md font-bold text-center hover:bg-blue-700"
+            >
+              Start Assessment
+            </button>
+          </div>
+        );
+      }
+
+      if (view === 'assessment') {
+        return (
+          <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-8">
+            <div className="bg-white p-6 md:p-8 rounded-lg shadow-sm border space-y-10">
+              
+              {/* PART 1 */}
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 border-b pb-3 mb-4">PART 1 - Work Style (32 items)</h2>
+                <div className="space-y-4">
+                  {workStyleItems.map((item) => {
+                    const expKey = `p1_${item.id}`;
+                    const isOpen = openExplanations[expKey];
+                    return (
+                      <div key={item.id} className="pt-2 border-b border-gray-100 pb-3">
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="text-gray-800 font-medium text-sm flex-1">{item.id}. {item.text}</p>
+                          <button
+                            type="button"
+                            onClick={() => toggleExplanation(expKey)}
+                            className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-1 rounded hover:bg-indigo-100 transition-colors whitespace-nowrap"
+                          >
+                            {isOpen ? "Hide Explanation" : "💡 Explain the Question"}
+                          </button>
+                        </div>
+
+                        {isOpen && (
+                          <div className="mt-3 p-4 bg-indigo-50 border border-indigo-200 rounded-md text-xs text-indigo-900 space-y-2">
+                            <p className="font-bold text-indigo-950">💡 {item.explanation}</p>
+                            <p className="leading-relaxed">{item.example}</p>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-5 gap-2 mt-3">
+                          {likertLabels.map(({ num, label }) => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => setPart1Responses({ ...part1Responses, [item.id]: num })}
+                              className={`p-2 text-xs border rounded-md text-center transition-colors ${
+                                part1Responses[item.id] === num ? 'bg-blue-600 text-white font-bold' : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Self Check Part 1 */}
+                <div className="mt-6 bg-slate-50 p-4 rounded-md border">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Self-check (not scored): In your own words, would you describe yourself as more of an introvert or an extrovert?
+                  </label>
+                  <input
+                    type="text"
+                    value={part1SelfCheck}
+                    onChange={(e) => setPart1SelfCheck(e.target.value)}
+                    placeholder="Enter your thoughts..."
+                    className="w-full p-2 border rounded-md text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* PART 2 */}
+              <div className="pt-4 border-t">
+                <h2 className="text-xl font-bold text-gray-800 border-b pb-3 mb-4">PART 2 - Grit (10 items)</h2>
+                <div className="space-y-4">
+                  {gritItems.map((item) => {
+                    const expKey = `p2_${item.id}`;
+                    const isOpen = openExplanations[expKey];
+                    return (
+                      <div key={item.id} className="pt-2 border-b border-gray-100 pb-3">
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="text-gray-800 font-medium text-sm flex-1">{item.id}. {item.text}</p>
+                          <button
+                            type="button"
+                            onClick={() => toggleExplanation(expKey)}
+                            className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-1 rounded hover:bg-indigo-100 transition-colors whitespace-nowrap"
+                          >
+                            {isOpen ? "Hide Explanation" : "💡 Explain the Question"}
+                          </button>
+                        </div>
+
+                        {isOpen && (
+                          <div className="mt-3 p-4 bg-indigo-50 border border-indigo-200 rounded-md text-xs text-indigo-900 space-y-2">
+                            <p className="font-bold text-indigo-950">💡 {item.explanation}</p>
+                            <p className="leading-relaxed">{item.example}</p>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-5 gap-2 mt-3">
+                          {likertLabels.map(({ num, label }) => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => setPart2Responses({ ...part2Responses, [item.id]: num })}
+                              className={`p-2 text-xs border rounded-md text-center transition-colors ${
+                                part2Responses[item.id] === num ? 'bg-blue-600 text-white font-bold' : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Self Check Part 2 */}
+                <div className="mt-6 bg-slate-50 p-4 rounded-md border">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Self-check (not scored): On a scale of "I give up easily" to "I never give up," where would you honestly place yourself, and why?
+                  </label>
+                  <input
+                    type="text"
+                    value={part2SelfCheck}
+                    onChange={(e) => setPart2SelfCheck(e.target.value)}
+                    placeholder="Enter your thoughts..."
+                    className="w-full p-2 border rounded-md text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* PART 3: LEARNING APPROACH */}
+              <div className="pt-4 border-t">
+                <h2 className="text-xl font-bold text-gray-800 pb-1">PART 3 - Learning Approach (10 scenarios)</h2>
+                <p className="text-xs text-blue-600 mb-4">💡 Select ALL options that fit how you would actually behave in each scenario.</p>
+                
+                {learningApproachItems.map((item) => {
+                  const selectedCodes = part3Responses[item.id] || [];
+                  const expKey = `p3_${item.id}`;
+                  const isOpen = openExplanations[expKey];
+
+                  return (
+                    <div key={item.id} className="mb-6 bg-gray-50 p-4 rounded-md border">
+                      <div className="flex justify-between items-start gap-2 mb-3">
+                        <p className="text-sm font-bold text-gray-800 flex-1">{item.scenario}</p>
+                        <button
+                          type="button"
+                          onClick={() => toggleExplanation(expKey)}
+                          className="text-xs bg-indigo-100 text-indigo-800 font-semibold px-2 py-1 rounded hover:bg-indigo-200 transition-colors whitespace-nowrap"
+                        >
+                          {isOpen ? "Hide Explanation" : "💡 Explain the Question"}
+                        </button>
+                      </div>
+
+                      {isOpen && (
+                        <div className="mb-4 p-4 bg-indigo-50 border border-indigo-200 rounded-md text-xs text-indigo-900 space-y-2">
+                          <p className="font-bold text-indigo-950">💡 {item.explanation}</p>
+                          <p className="leading-relaxed">{item.example}</p>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        {item.options.map((opt) => {
+                          const isChecked = selectedCodes.includes(opt.code);
+                          return (
+                            <label
+                              key={opt.code}
+                              onClick={() => togglePart3Option(item.id, opt.code)}
+                              className={`flex items-start p-2.5 border rounded-md cursor-pointer transition-colors ${
+                                isChecked ? 'bg-blue-50 border-blue-400' : 'bg-white hover:bg-gray-100'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {}}
+                                className="mt-0.5 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                              />
+                              <span className="ml-3 text-xs text-gray-700 leading-relaxed">
+                                <strong>({opt.code})</strong> {opt.label}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Self Check Part 3 */}
+                <div className="mt-6 bg-slate-50 p-4 rounded-md border">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Self-check (not scored): If you had to describe how you learn best in one sentence, what would you say?
+                  </label>
+                  <input
+                    type="text"
+                    value={part3SelfCheck}
+                    onChange={(e) => setPart3SelfCheck(e.target.value)}
+                    placeholder="Enter your thoughts..."
+                    className="w-full p-2 border rounded-md text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* PART 4: INTEREST PROFILE */}
+              <div className="pt-4 border-t">
+                <h2 className="text-xl font-bold text-gray-800 border-b pb-3 mb-4">PART 4 - Interest Profile (36 items)</h2>
+                <div className="space-y-4">
+                  {interestProfileItems.map((item) => {
+                    const expKey = `p4_${item.id}`;
+                    const isOpen = openExplanations[expKey];
+                    return (
+                      <div key={item.id} className="pt-2 border-b border-gray-100 pb-3">
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="text-gray-800 font-medium text-sm flex-1">{item.id}. {item.text}</p>
+                          <button
+                            type="button"
+                            onClick={() => toggleExplanation(expKey)}
+                            className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-1 rounded hover:bg-indigo-100 transition-colors whitespace-nowrap"
+                          >
+                            {isOpen ? "Hide Explanation" : "💡 Explain the Question"}
+                          </button>
+                        </div>
+
+                        {isOpen && (
+                          <div className="mt-3 p-4 bg-indigo-50 border border-indigo-200 rounded-md text-xs text-indigo-900 space-y-2">
+                            <p className="font-bold text-indigo-950">💡 {item.explanation}</p>
+                            <p className="leading-relaxed">{item.example}</p>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-5 gap-2 mt-3">
+                          {part4LikertLabels.map(({ num, label }) => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => setPart4Responses({ ...part4Responses, [item.id]: num })}
+                              className={`p-2 text-xs border rounded-md text-center transition-colors ${
+                                part4Responses[item.id] === num ? 'bg-blue-600 text-white font-bold' : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Self Check Part 4 */}
+                <div className="mt-6 bg-slate-50 p-4 rounded-md border">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Self-check (not scored): If you didn't have to think about salary or family expectations at all, what kind of work would genuinely excite you?
+                  </label>
+                  <input
+                    type="text"
+                    value={part4SelfCheck}
+                    onChange={(e) => setPart4SelfCheck(e.target.value)}
+                    placeholder="Enter your thoughts..."
+                    className="w-full p-2 border rounded-md text-xs"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={submitAssessment}
+                className="w-full mt-8 bg-green-600 text-white py-4 rounded-md font-bold text-lg hover:bg-green-700 transition-colors shadow-md"
+              >
+                Submit Complete Assessment
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // --- RESULTS SUMMARY VIEW (ALL PARTS INCLUDED) ---
+      if (view === 'summary') {
+        const p1Score = calculateWorkStyleScore(part1Responses);
+        const p2Score = calculateGritScore(part2Responses);
+        const p3Profile = calculateLearningProfile(part3Responses);
+        const p4Totals = calculateInterestProfile(part4Responses);
+
+        return (
+          <div className="max-w-3xl mx-auto my-8 p-6 md:p-8 bg-white rounded-lg shadow-sm border space-y-6 print-shadow-none">
+            
+            {/* WRAPPER TARGETED FOR PDF GENERATION */}
+            <div id="pdf-report-content" className="p-4 bg-white space-y-6">
+              <div className="text-center space-y-2 border-b pb-4">
+                <div className="text-green-500 text-5xl no-print">✓</div>
+                <h1 className="text-xl font-bold text-blue-900 uppercase tracking-wide">PrepWorks Global Student Assessment</h1>
+                <h2 className="text-2xl font-bold text-gray-800">Assessment Diagnostic Summary</h2>
+                <div className="text-xs text-gray-500 mt-2 flex justify-center gap-6">
+                  <span><strong>Student Name:</strong> {studentName || 'N/A'}</span>
+                  <span><strong>Date:</strong> {new Date().toLocaleDateString()}</span>
+                </div>
+              </div>
+
+              {/* PART 1 SUMMARY */}
+              <div className="bg-slate-50 p-5 rounded-lg border text-left space-y-2">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <h3 className="font-bold text-gray-800">Part 1: Work Style Overview</h3>
+                  <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2.5 py-1 rounded">Average: {p1Score.avg} / 5</span>
+                </div>
+                <p className="text-xs text-gray-600">Completed items: {p1Score.count} / 32</p>
+                {part1SelfCheck && (
+                  <p className="text-xs text-gray-700 italic border-l-2 border-blue-400 pl-2 mt-2">
+                    "Self Check: {part1SelfCheck}"
+                  </p>
+                )}
+              </div>
+
+              {/* PART 2 SUMMARY */}
+              <div className="bg-slate-50 p-5 rounded-lg border text-left space-y-2">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <h3 className="font-bold text-gray-800">Part 2: Grit Score</h3>
+                  <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded">Overall Score: {p2Score.score} / 5</span>
+                </div>
+                <p className="text-xs text-gray-600">Perseverance & consistency score across {p2Score.count} items.</p>
+                {part2SelfCheck && (
+                  <p className="text-xs text-gray-700 italic border-l-2 border-emerald-400 pl-2 mt-2">
+                    "Self Check: {part2SelfCheck}"
+                  </p>
+                )}
+              </div>
+
+              {/* PART 3 SUMMARY */}
+              <div className="bg-slate-50 p-5 rounded-lg border text-left space-y-4">
+                <h3 className="font-bold text-gray-800 border-b pb-2">Part 3: Learning Approach Breakdown</h3>
+                <div className="space-y-3">
+                  {Object.entries(p3Profile.counts).map(([style, count]) => {
+                    const percentage = p3Profile.totalSelections > 0 ? Math.round((count / p3Profile.totalSelections) * 100) : 0;
+                    return (
+                      <div key={style} className="space-y-1">
+                        <div className="flex justify-between text-xs font-semibold text-gray-700">
+                          <span>{style}</span>
+                          <span>{count} selections ({percentage}%)</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {part3SelfCheck && (
+                  <p className="text-xs text-gray-700 italic border-l-2 border-indigo-400 pl-2 mt-2">
+                    "Self Check: {part3SelfCheck}"
+                  </p>
+                )}
+              </div>
+
+              {/* PART 4 SUMMARY */}
+              <div className="bg-slate-50 p-5 rounded-lg border text-left space-y-4">
+                <h3 className="font-bold text-gray-800 border-b pb-2">Part 4: Interest Profile (Holland Codes)</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {Object.entries(p4Totals).map(([cat, val]) => (
+                    <div key={cat} className="p-3 bg-white border rounded text-center">
+                      <div className="text-xs text-gray-500 font-medium">{cat}</div>
+                      <div className="text-lg font-bold text-gray-800">{val} pts</div>
+                    </div>
+                  ))}
+                </div>
+                {part4SelfCheck && (
+                  <p className="text-xs text-gray-700 italic border-l-2 border-purple-400 pl-2 mt-2">
+                    "Self Check: {part4SelfCheck}"
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* DOWNLOAD AND EMAIL BUTTON ACTION BAR */}
+            <div className="no-print pt-4 border-t flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={handleDownloadPDF}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-md flex items-center justify-center gap-2 transition-colors shadow-sm text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download My Results
+              </button>
+
+              <button
+                onClick={handleEmailResults}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-md flex items-center justify-center gap-2 transition-colors shadow-sm text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                Email My Results
+              </button>
+            </div>
+
+          </div>
+        );
+      }
+
+      return null;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<MainApp />);
+  </script>
+</body>
+</html>
