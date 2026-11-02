@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>PrepWorks Global - Assessment System</title>
+  <title>PrepWorks Global - Clarity Scan</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Added html2pdf.js via CDN for client-side PDF generation -->
+  <!-- html2pdf.js via CDN for client-side PDF generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body { background-color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
@@ -25,8 +25,11 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    // Placeholders - replace with your actual target email address
-    const COUNSELOR_EMAIL = "info@prepworksglobal.com";
+    // --- CONFIGURATION CONSTANTS (Easily updated here) ---
+    const SHEET_URL = "https://script.google.com/macros/s/AKfycbzdvYhjTNqubJajPrKWZMja-Kb0R0usxxU1dnXhiKMdmgrvkBWLHtvRY9aRec861Fov/exec";
+    const RAZORPAY_NORTH_STAR_LINK = "#"; // Replace with your actual Razorpay Payment Link for North Star Report
+    const RAZORPAY_BUNDLE_LINK = "#";     // Replace with your actual Razorpay Payment Link for Report + Debrief
+    const WHATSAPP_NUMBER = "7330710468"; // WhatsApp number (digits only)
 
     // --- ASSESSMENT DATA STRUCTURES ---
     const likertLabels = [
@@ -264,16 +267,50 @@
       { id: 36, text: "Work in a role with clearly defined rules and procedures.", category: "Conventional", explanation: "Do you prefer environments where rules and expectations are crystal clear?", example: "Spider-Man Example: Working as a library assistant following clear cataloging rules." }
     ];
 
+    const TOTAL_QUESTIONS = 88; // 32 + 10 + 10 + 36
+
+    // --- HELPER FOR SAFE LOCALSTORAGE ---
+    const safeStorage = {
+      getItem: (key) => {
+        try { return localStorage.getItem(key); } catch (e) { return null; }
+      },
+      setItem: (key, val) => {
+        try { localStorage.setItem(key, val); } catch (e) {}
+      },
+      removeItem: (key) => {
+        try { localStorage.removeItem(key); } catch (e) {}
+      }
+    };
+
+    // --- POST TO GOOGLE SHEET HELPER ---
+    const sendToGoogleSheet = (payload) => {
+      if (!SHEET_URL) return;
+      try {
+        fetch(SHEET_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        }).catch(() => {});
+      } catch (e) {}
+    };
+
     // --- MAIN APP COMPONENT ---
     function MainApp() {
-      const [view, setView] = useState('loading');
-      const [studentName, setStudentName] = useState('');
-      const [errorMessage, setErrorMessage] = useState('');
+      const [view, setView] = useState('signup'); // 'signup', 'resumePrompt', 'assessment', 'summary'
       
-      // Admin States
-      const [newStudentName, setNewStudentName] = useState('');
-      const [netlifyDomain, setNetlifyDomain] = useState('');
-      const [records, setRecords] = useState({});
+      // Sign-up Form State
+      const [fullName, setFullName] = useState('');
+      const [email, setEmail] = useState('');
+      const [countryCode, setCountryCode] = useState('+91');
+      const [whatsappNumber, setWhatsappNumber] = useState('');
+      const [stage, setStage] = useState('');
+      const [consent, setConsent] = useState(false);
+      const [source, setSource] = useState('direct');
+      const [formError, setFormError] = useState('');
+
+      // Saved State Prompt
+      const [savedState, setSavedState] = useState(null);
 
       // Explanation toggle state
       const [openExplanations, setOpenExplanations] = useState({});
@@ -294,50 +331,114 @@
       const [part3SelfCheck, setPart3SelfCheck] = useState('');
       const [part4SelfCheck, setPart4SelfCheck] = useState('');
 
-      // Email fallback panel (shown in case mailto: silently fails — no default mail app registered)
-      const [showEmailFallback, setShowEmailFallback] = useState(false);
-      const [copyButtonLabel, setCopyButtonLabel] = useState('Copy message');
-
+      // Initialize parameters, URL prefilling & check saved progress
       useEffect(() => {
-        const stored = JSON.parse(localStorage.getItem('prepworks_assessments') || '{}');
-        setRecords(stored);
-
-        const savedDomain = localStorage.getItem('prepworks_netlify_domain') || '';
-        setNetlifyDomain(savedDomain);
-
         const params = new URLSearchParams(window.location.search);
         const nameParam = params.get('name');
+        const emailParam = params.get('email');
+        const srcParam = params.get('src');
 
-        if (nameParam) {
-          // Name travels inside the link itself, so this works on ANY device —
-          // no dependency on localStorage records existing on the student's browser.
-          setStudentName(decodeURIComponent(nameParam));
-          setView('intro');
-        } else {
-          setView('admin');
+        if (nameParam) setFullName(decodeURIComponent(nameParam));
+        if (emailParam) setEmail(decodeURIComponent(emailParam));
+        if (srcParam) setSource(decodeURIComponent(srcParam));
+
+        // Check LocalStorage progress
+        const rawSaved = safeStorage.getItem('prepworks_clarity_scan_saved');
+        if (rawSaved) {
+          try {
+            const parsed = JSON.parse(rawSaved);
+            if (parsed && (parsed.view === 'assessment' || parsed.view === 'summary')) {
+              setSavedState(parsed);
+              setView('resumePrompt');
+            }
+          } catch (e) {}
         }
       }, []);
 
-      const saveDomain = (e) => {
-        const val = e.target.value;
-        setNetlifyDomain(val);
-        localStorage.setItem('prepworks_netlify_domain', val);
+      // Auto-save progress on changes
+      useEffect(() => {
+        if (view === 'assessment') {
+          const stateToSave = {
+            view: 'assessment',
+            userInfo: { fullName, email, countryCode, whatsappNumber, stage, consent, source },
+            part1Responses,
+            part2Responses,
+            part3Responses,
+            part4Responses,
+            part1SelfCheck,
+            part2SelfCheck,
+            part3SelfCheck,
+            part4SelfCheck
+          };
+          safeStorage.setItem('prepworks_clarity_scan_saved', JSON.stringify(stateToSave));
+        }
+      }, [
+        view, fullName, email, countryCode, whatsappNumber, stage, consent, source,
+        part1Responses, part2Responses, part3Responses, part4Responses,
+        part1SelfCheck, part2SelfCheck, part3SelfCheck, part4SelfCheck
+      ]);
+
+      const handleResume = () => {
+        if (!savedState) return;
+        const u = savedState.userInfo || {};
+        setFullName(u.fullName || '');
+        setEmail(u.email || '');
+        setCountryCode(u.countryCode || '+91');
+        setWhatsappNumber(u.whatsappNumber || '');
+        setStage(u.stage || '');
+        setConsent(u.consent || false);
+        setSource(u.source || 'direct');
+
+        setPart1Responses(savedState.part1Responses || {});
+        setPart2Responses(savedState.part2Responses || {});
+        setPart3Responses(savedState.part3Responses || {});
+        setPart4Responses(savedState.part4Responses || {});
+
+        setPart1SelfCheck(savedState.part1SelfCheck || '');
+        setPart2SelfCheck(savedState.part2SelfCheck || '');
+        setPart3SelfCheck(savedState.part3SelfCheck || '');
+        setPart4SelfCheck(savedState.part4SelfCheck || '');
+
+        setView(savedState.view || 'assessment');
       };
 
-      const generateLink = () => {
-        if (!newStudentName.trim()) return alert("Please enter a student name");
-        const token = Math.random().toString(36).substring(2, 10);
-        const updated = {
-          ...records,
-          [token]: {
-            name: newStudentName,
-            status: 'pending',
-            createdAt: new Date().toLocaleDateString()
-          }
-        };
-        setRecords(updated);
-        localStorage.setItem('prepworks_assessments', JSON.stringify(updated));
-        setNewStudentName('');
+      const handleStartFresh = () => {
+        safeStorage.removeItem('prepworks_clarity_scan_saved');
+        setSavedState(null);
+        setView('signup');
+      };
+
+      const validateSignup = (e) => {
+        e.preventDefault();
+        setFormError('');
+
+        if (!fullName.trim()) return setFormError('Please enter your full name.');
+        if (!email.trim()) return setFormError('Please enter your email address.');
+        
+        // Basic Email Format Validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email.trim())) {
+          return setFormError('Please enter a valid email address.');
+        }
+
+        if (!whatsappNumber.trim()) return setFormError('Please enter your WhatsApp number.');
+        if (!stage) return setFormError('Please select your current stage.');
+        if (!consent) return setFormError('You must agree to the storage and contact terms to proceed.');
+
+        const fullWhatsapp = `${countryCode}${whatsappNumber.trim()}`;
+
+        // Fire POST event: "started"
+        sendToGoogleSheet({
+          event: "started",
+          name: fullName.trim(),
+          email: email.trim(),
+          whatsapp: fullWhatsapp,
+          stage: stage,
+          source: source,
+          consent: consent
+        });
+
+        setView('assessment');
       };
 
       const togglePart3Option = (scenarioId, code) => {
@@ -404,8 +505,6 @@
         return totals;
       };
 
-      // Returns the item IDs (question numbers) that were left unanswered,
-      // so counsellors can see exactly what a student skipped, not just a count.
       const getSkippedItemIds = (items, responses, isMultiSelect) => {
         const skipped = [];
         items.forEach((item) => {
@@ -416,32 +515,54 @@
         return skipped;
       };
 
+      const countAnsweredQuestions = () => {
+        let count = 0;
+        workStyleItems.forEach(item => { if (part1Responses[item.id] !== undefined) count++; });
+        gritItems.forEach(item => { if (part2Responses[item.id] !== undefined) count++; });
+        learningApproachItems.forEach(item => { if (part3Responses[item.id] && part3Responses[item.id].length > 0) count++; });
+        interestProfileItems.forEach(item => { if (part4Responses[item.id] !== undefined) count++; });
+        return count;
+      };
+
       const submitAssessment = () => {
+        const p1Score = calculateWorkStyleScore(part1Responses);
+        const p2Score = calculateGritScore(part2Responses);
+        const p3Profile = calculateLearningProfile(part3Responses);
+        const p4Totals = calculateInterestProfile(part4Responses);
+
+        const fullWhatsapp = `${countryCode}${whatsappNumber.trim()}`;
+
+        // Fire POST event: "completed"
+        sendToGoogleSheet({
+          event: "completed",
+          name: fullName.trim(),
+          email: email.trim(),
+          whatsapp: fullWhatsapp,
+          stage: stage,
+          source: source,
+          consent: consent,
+          scores: {
+            workStyleAvg: p1Score.avg,
+            gritScore: p2Score.score,
+            learningProfileCounts: p3Profile.counts,
+            interestHollandScores: p4Totals
+          },
+          answers: {
+            part1WorkStyle: part1Responses,
+            part2Grit: part2Responses,
+            part3LearningApproach: part3Responses,
+            part4InterestProfile: part4Responses,
+            selfChecks: {
+              part1: part1SelfCheck,
+              part2: part2SelfCheck,
+              part3: part3SelfCheck,
+              part4: part4SelfCheck
+            }
+          }
+        });
+
+        safeStorage.removeItem('prepworks_clarity_scan_saved');
         setView('summary');
-      };
-
-      const getFullUrl = (name) => {
-        let baseUrl = netlifyDomain.trim();
-        if (!baseUrl) {
-          baseUrl = window.location.href.split('?')[0];
-        } else {
-          if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-            baseUrl = 'https://' + baseUrl;
-          }
-          if (baseUrl.endsWith('/')) {
-            baseUrl = baseUrl.slice(0, -1);
-          }
-        }
-        return `${baseUrl}?name=${encodeURIComponent(name)}`;
-      };
-
-      const getEmailLink = (name) => {
-        const link = getFullUrl(name);
-        const subject = encodeURIComponent(`PrepWorks Global - Profile Assessment Link for ${name}`);
-        const body = encodeURIComponent(
-          `Hi ${name},\n\nPlease complete your student profile assessment using your personalized link below:\n\n${link}\n\nInstructions:\n1. Click the link above to complete the assessment.\n2. Once finished, click "Download My Results" on the summary screen.\n3. Reply to this email and attach the saved PDF report for our upcoming counseling session.\n\nBest regards,\nPrepWorks Global`
-        );
-        return `mailto:?subject=${subject}&body=${body}`;
       };
 
       // Client-side PDF Generation Function
@@ -449,167 +570,169 @@
         const element = document.getElementById('pdf-report-content');
         if (!element) return;
 
-        const sanitizedName = (studentName || "Student").replace(/[^a-zA-Z0-9]/g, "_");
-        const filename = `${sanitizedName}_QuizResults.pdf`;
+        const sanitizedName = (fullName || "Student").replace(/[^a-zA-Z0-9]/g, "_");
+        const filename = `${sanitizedName}_ClarityScan_Results.pdf`;
 
         const opt = {
           margin: 0.5,
           filename: filename,
           image: { type: 'jpeg', quality: 0.98 },
-          // scrollX/scrollY: 0 stops html2canvas from offsetting the capture by
-          // whatever the page's current scroll position happens to be — without
-          // this, if the summary page was scrolled when Download was clicked,
-          // the PDF comes out with a blank gap up top and content cut off.
           html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: document.documentElement.scrollWidth },
           jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-          // Avoid slicing a section's card in half across a page boundary.
           pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
         };
 
-        // Force the window to the top and let the browser settle before capturing.
         window.scrollTo(0, 0);
         setTimeout(() => {
           html2pdf().set(opt).from(element).save();
         }, 150);
       };
 
-      // Client-side Mailto Generator Function
-      const handleEmailResults = () => {
-        const name = studentName || "Student";
-        const subject = encodeURIComponent(`Quiz Results — ${name}`);
-        const body = encodeURIComponent(
-          `Hi,\n\nAttached is my assessment results report for review.\n\n[IMPORTANT: Please manually attach the PDF file (${name}_QuizResults.pdf) that you just downloaded before sending this email.]\n\nThank you,\n${name}`
-        );
-        // Attempt to open the device's default mail app.
-        window.location.href = `mailto:${COUNSELOR_EMAIL}?subject=${subject}&body=${body}`;
-        // Always show the fallback panel too — mailto: fails silently on devices
-        // with no default mail app registered, with no error to catch.
-        setShowEmailFallback(true);
-      };
-
-      const handleCopyEmailText = () => {
-        const name = studentName || "Student";
-        const text = `To: ${COUNSELOR_EMAIL}\nSubject: Quiz Results — ${name}\n\nHi,\n\nAttached is my assessment results report for review.\n\n[IMPORTANT: Please manually attach the PDF file (${name}_QuizResults.pdf) that you just downloaded before sending this email.]\n\nThank you,\n${name}`;
-        navigator.clipboard.writeText(text).then(() => {
-          setCopyButtonLabel('Copied!');
-          setTimeout(() => setCopyButtonLabel('Copy message'), 2000);
-        }).catch(() => {
-          setCopyButtonLabel('Copy failed — select text manually');
-        });
-      };
-
-      if (view === 'loading') return null;
-
-      if (view === 'error') {
+      // --- RESUME PROMPT SCREEN ---
+      if (view === 'resumePrompt') {
         return (
-          <div className="max-w-md mx-auto mt-20 p-6 bg-red-50 border border-red-200 rounded-lg text-center">
-            <h2 className="text-xl font-bold text-red-700 mb-2">Access Restricted</h2>
-            <p className="text-red-600 text-sm">{errorMessage}</p>
+          <div className="max-w-md mx-auto mt-16 p-6 bg-white rounded-lg shadow-sm border text-center space-y-4">
+            <h2 className="text-xl font-bold text-gray-800">Welcome Back!</h2>
+            <p className="text-gray-600 text-sm">We found your previous in-progress Clarity Scan assessment.</p>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={handleResume}
+                className="w-full bg-blue-600 text-white py-2.5 rounded-md font-semibold hover:bg-blue-700 transition-colors text-sm"
+              >
+                Continue where you left off
+              </button>
+              <button
+                onClick={handleStartFresh}
+                className="w-full bg-gray-100 text-gray-700 py-2.5 rounded-md font-semibold hover:bg-gray-200 transition-colors text-sm"
+              >
+                Start again
+              </button>
+            </div>
           </div>
         );
       }
 
-      if (view === 'admin') {
+      // --- CHANGE 1: SIGN-UP SCREEN ---
+      if (view === 'signup') {
         return (
-          <div className="max-w-4xl mx-auto p-4 md:p-8">
-            <header className="bg-white p-6 rounded-lg shadow-sm border mb-6">
-              <h1 className="text-2xl font-bold text-gray-800">PrepWorks Global — Admin Portal</h1>
-              <p className="text-sm text-gray-500">Generate and manage single-use student assessment links</p>
-            </header>
-
-            {/* Netlify Domain Settings Section */}
-            <div className="bg-blue-50 border border-blue-200 p-6 rounded-lg shadow-sm mb-6">
-              <h2 className="text-md font-bold text-blue-900 mb-1">🌐 Website Domain Config</h2>
-              <p className="text-xs text-blue-700 mb-3">Paste your hosted site URL here (e.g. your GitHub Pages link) so generated links open correctly for students everywhere on the web.</p>
-              <input
-                type="text"
-                placeholder="e.g. https://yourusername.github.io/your-repo-name"
-                value={netlifyDomain}
-                onChange={saveDomain}
-                className="w-full p-2 border border-blue-300 rounded-md text-sm bg-white"
-              />
+          <div className="max-w-lg mx-auto mt-8 p-6 bg-white rounded-lg shadow-sm border space-y-6">
+            <div className="text-center space-y-2 border-b pb-4">
+              <h1 className="text-2xl font-bold text-blue-900">PrepWorks Global</h1>
+              <h2 className="text-lg font-bold text-gray-800">Clarity Scan: Student Profile Assessment</h2>
+              <p className="text-xs text-gray-500">Please enter your details below to begin your self-contained assessment.</p>
             </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-sm border mb-6">
-              <h2 className="text-lg font-bold mb-3">Create New Assessment Link</h2>
-              <div className="flex gap-2">
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-xs font-medium">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={validateSignup} className="space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Full Name *</label>
                 <input
                   type="text"
-                  placeholder="Enter Student Full Name"
-                  value={newStudentName}
-                  onChange={(e) => setNewStudentName(e.target.value)}
-                  className="flex-1 p-2 border rounded-md text-sm"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Rahul Sharma"
+                  className="w-full p-2.5 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 />
-                <button onClick={generateLink} className="bg-blue-600 text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-blue-700">
-                  Generate Link
-                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Email Address *</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. rahul@example.com"
+                  className="w-full p-2.5 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">WhatsApp Number *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={countryCode}
+                    onChange={(e) => setCountryCode(e.target.value)}
+                    className="w-20 p-2.5 border rounded-md text-sm text-center font-medium bg-gray-50"
+                  />
+                  <input
+                    type="tel"
+                    value={whatsappNumber}
+                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                    placeholder="9876543210"
+                    className="flex-1 p-2.5 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Current Stage *</label>
+                <select
+                  value={stage}
+                  onChange={(e) => setStage(e.target.value)}
+                  className="w-full p-2.5 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                >
+                  <option value="">Select your stage...</option>
+                  <option value="School student">School student</option>
+                  <option value="College student">College student</option>
+                  <option value="Recent graduate">Recent graduate</option>
+                  <option value="Working professional">Working professional</option>
+                  <option value="Parent of a student">Parent of a student</option>
+                </select>
+              </div>
+
+              <div className="pt-2">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-600 leading-relaxed">
+                    I agree that PrepWorksGlobal may store my answers and contact me about my results. If I am under 18, my parent or guardian has agreed. *
+                  </span>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full mt-4 bg-blue-600 text-white py-3 rounded-md font-bold text-center hover:bg-blue-700 transition-colors shadow-sm text-sm"
+              >
+                Start Assessment
+              </button>
+            </form>
+          </div>
+        );
+      }
+
+      // --- ASSESSMENT SCREEN ---
+      if (view === 'assessment') {
+        const answeredCount = countAnsweredQuestions();
+        const progressPercent = Math.round((answeredCount / TOTAL_QUESTIONS) * 100);
+
+        return (
+          <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
+            
+            {/* Sticky Mobile-Friendly Progress Bar */}
+            <div className="sticky top-0 z-10 bg-white p-4 rounded-lg shadow-sm border">
+              <div className="flex justify-between items-center text-xs font-bold text-gray-700 mb-1.5">
+                <span>Assessment Progress</span>
+                <span>Question {answeredCount} of {TOTAL_QUESTIONS} ({progressPercent}%)</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div
+                  className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                ></div>
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <h2 className="text-lg font-bold mb-3">Student Assessment Links</h2>
-              {Object.keys(records).length === 0 ? (
-                <p className="text-gray-500 text-sm">No links generated yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {Object.entries(records).map(([token, item]) => (
-                    <div key={token} className="p-3 border rounded-md flex flex-col md:flex-row md:items-center justify-between gap-2 bg-gray-50">
-                      <div>
-                        <div className="font-bold text-gray-800">{item.name}</div>
-                        <div className="text-xs text-gray-500">Status: 
-                          <span className={`ml-1 font-semibold ${item.status === 'completed' ? 'text-green-600' : 'text-amber-600'}`}>
-                            {item.status}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {item.status === 'pending' ? (
-                          <>
-                            <a
-                              href={getEmailLink(item.name)}
-                              className="bg-blue-600 text-white text-xs px-3 py-2 rounded font-medium hover:bg-blue-700 flex items-center gap-1"
-                            >
-                              📧 Email to Student
-                            </a>
-                            <a
-                              href={getFullUrl(item.name)}
-                              target="_blank"
-                              className="bg-gray-200 text-gray-700 text-xs px-3 py-2 rounded font-medium hover:bg-gray-300"
-                            >
-                              ▶ Open Link
-                            </a>
-                          </>
-                        ) : (
-                          <span className="text-xs text-gray-400 italic">Completed</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      }
-
-      if (view === 'intro') {
-        return (
-          <div className="max-w-2xl mx-auto mt-10 p-6 bg-white rounded-lg shadow-sm border">
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome, {studentName}!</h1>
-            <p className="text-gray-600 mb-6 text-sm">You have been invited to complete your profile assessment. Every single question across all sections features a 💡 <strong>Explain the Question</strong> button with a Spider-Man movie example to help you understand!</p>
-            <button
-              onClick={() => setView('assessment')}
-              className="w-full bg-blue-600 text-white py-3 rounded-md font-bold text-center hover:bg-blue-700"
-            >
-              Start Assessment
-            </button>
-          </div>
-        );
-      }
-
-      if (view === 'assessment') {
-        return (
-          <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-8">
             <div className="bg-white p-6 md:p-8 rounded-lg shadow-sm border space-y-10">
               
               {/* PART 1 */}
@@ -668,7 +791,7 @@
                     value={part1SelfCheck}
                     onChange={(e) => setPart1SelfCheck(e.target.value)}
                     placeholder="Enter your thoughts..."
-                    className="w-full p-2 border rounded-md text-xs"
+                    className="w-full p-2 border rounded-md text-xs outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -729,7 +852,7 @@
                     value={part2SelfCheck}
                     onChange={(e) => setPart2SelfCheck(e.target.value)}
                     placeholder="Enter your thoughts..."
-                    className="w-full p-2 border rounded-md text-xs"
+                    className="w-full p-2 border rounded-md text-xs outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -802,7 +925,7 @@
                     value={part3SelfCheck}
                     onChange={(e) => setPart3SelfCheck(e.target.value)}
                     placeholder="Enter your thoughts..."
-                    className="w-full p-2 border rounded-md text-xs"
+                    className="w-full p-2 border rounded-md text-xs outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -863,7 +986,7 @@
                     value={part4SelfCheck}
                     onChange={(e) => setPart4SelfCheck(e.target.value)}
                     placeholder="Enter your thoughts..."
-                    className="w-full p-2 border rounded-md text-xs"
+                    className="w-full p-2 border rounded-md text-xs outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -879,7 +1002,7 @@
         );
       }
 
-      // --- RESULTS SUMMARY VIEW (ALL PARTS INCLUDED) ---
+      // --- CHANGE 4: RESULTS SUMMARY VIEW & NEW CTA ---
       if (view === 'summary') {
         const p1Score = calculateWorkStyleScore(part1Responses);
         const p2Score = calculateGritScore(part2Responses);
@@ -900,8 +1023,9 @@
                 <div className="text-green-500 text-5xl no-print">✓</div>
                 <h1 className="text-xl font-bold text-blue-900 uppercase tracking-wide">PrepWorks Global Student Assessment</h1>
                 <h2 className="text-2xl font-bold text-gray-800">Assessment Diagnostic Summary</h2>
-                <div className="text-xs text-gray-500 mt-2 flex justify-center gap-6">
-                  <span><strong>Student Name:</strong> {studentName || 'N/A'}</span>
+                <div className="text-xs text-gray-500 mt-2 flex justify-center gap-6 flex-wrap">
+                  <span><strong>Student Name:</strong> {fullName || 'N/A'}</span>
+                  <span><strong>Stage:</strong> {stage || 'N/A'}</span>
                   <span><strong>Date:</strong> {new Date().toLocaleDateString()}</span>
                 </div>
               </div>
@@ -993,55 +1117,61 @@
               </div>
             </div>
 
-            {/* DOWNLOAD AND EMAIL BUTTON ACTION BAR */}
-            <div className="no-print pt-4 border-t flex flex-col sm:flex-row gap-3 justify-center">
+            {/* PDF DOWNLOAD BUTTON */}
+            <div className="no-print pt-4 border-t flex justify-center">
               <button
                 onClick={handleDownloadPDF}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-md flex items-center justify-center gap-2 transition-colors shadow-sm text-sm"
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md flex items-center justify-center gap-2 transition-colors shadow-sm text-sm"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                Download My Results
-              </button>
-
-              <button
-                onClick={handleEmailResults}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-md flex items-center justify-center gap-2 transition-colors shadow-sm text-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                Email My Results
+                Download My Results PDF
               </button>
             </div>
 
-            {showEmailFallback && (
-              <div className="no-print mt-2 p-4 bg-amber-50 border border-amber-200 rounded-md text-left">
-                <p className="text-xs font-semibold text-amber-900 mb-2">
-                  If your email app didn't open, no problem — copy the message below and paste it into Gmail, Outlook, or whichever email service you use. Don't forget to attach the PDF you downloaded.
-                </p>
-                <div className="bg-white border rounded p-3 text-xs text-gray-700 whitespace-pre-wrap mb-2">
-{`To: ${COUNSELOR_EMAIL}
-Subject: Quiz Results — ${studentName || "Student"}
-
-Hi,
-
-Attached is my assessment results report for review.
-
-[IMPORTANT: Please manually attach the PDF file (${(studentName || "Student")}_QuizResults.pdf) that you just downloaded before sending this email.]
-
-Thank you,
-${studentName || "Student"}`}
-                </div>
-                <button
-                  onClick={handleCopyEmailText}
-                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-2 rounded"
+            {/* CHANGE 4: NORTH STAR REPORT CTA SECTION */}
+            <div className="no-print mt-8 p-6 bg-gradient-to-br from-slate-900 to-blue-950 text-white rounded-xl shadow-lg border border-blue-900 text-center space-y-5">
+              <h3 className="text-2xl font-extrabold text-blue-300">Get your full North Star Report</h3>
+              <p className="text-sm text-slate-200 max-w-xl mx-auto leading-relaxed">
+                Your Clarity Scan shows where you stand. The North Star Report turns it into a personalised SWOT analysis and a step-by-step career plan, written for you by a PrepWorksGlobal career coach. Delivered within 48 hours.
+              </p>
+              
+              <div className="flex flex-col sm:flex-row gap-3 justify-center items-center pt-2">
+                <a
+                  href={RAZORPAY_NORTH_STAR_LINK}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold py-3.5 px-6 rounded-lg text-sm transition-all transform hover:scale-105 shadow-md flex items-center justify-center"
                 >
-                  {copyButtonLabel}
-                </button>
+                  Get my North Star Report: ₹1,299
+                </a>
+                <a
+                  href={RAZORPAY_BUNDLE_LINK}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-blue-200 border border-blue-400/30 font-semibold py-3.5 px-6 rounded-lg text-sm transition-colors flex items-center justify-center"
+                >
+                  Report + 1-hour debrief: ₹3,999
+                </a>
               </div>
-            )}
+
+              <div className="pt-2 space-y-1">
+                <div>
+                  <a
+                    href={`https://wa.me/${WHATSAPP_NUMBER}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-300 hover:text-blue-200 underline font-medium"
+                  >
+                    Have a question first? Chat on WhatsApp
+                  </a>
+                </div>
+                <p className="text-xs text-slate-400 pt-3 border-t border-slate-800">
+                  We've also saved your results, so you don't need to send us anything.
+                </p>
+              </div>
+            </div>
 
           </div>
         );
