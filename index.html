@@ -297,7 +297,7 @@
 
     // --- MAIN APP COMPONENT ---
     function MainApp() {
-      const [view, setView] = useState('signup'); // 'signup', 'resumePrompt', 'assessment', 'summary'
+      const [view, setView] = useState('signup'); // 'signup', 'intro', 'resumePrompt', 'assessment', 'summary'
       
       // Sign-up Form State
       const [fullName, setFullName] = useState('');
@@ -438,7 +438,7 @@
           consent: consent
         });
 
-        setView('assessment');
+        setView('intro');
       };
 
       const togglePart3Option = (scenarioId, code) => {
@@ -707,6 +707,25 @@
                 Start Assessment
               </button>
             </form>
+          </div>
+        );
+      }
+
+      // --- INTRO SCREEN (MEET THE CLARITY CREW) ---
+      if (view === 'intro') {
+        const firstName = fullName.trim().split(' ')[0] || fullName.trim();
+        return (
+          <div className="max-w-2xl mx-auto mt-10 p-6 bg-white rounded-lg shadow-sm border space-y-6">
+            <h1 className="text-2xl font-bold text-gray-800">Welcome, {firstName}!</h1>
+            <p className="text-gray-600 text-sm leading-relaxed">
+              Every question has a 💡 Explain the Question button with a short example featuring the Clarity Crew: <strong>Kiran</strong>, <strong>Zoya</strong>, <strong>Dev</strong> and <strong>Meera</strong> (four classmates), their science teacher <strong>Ms. Thomas</strong>, and Kiran's grandmother <strong>Paati</strong>. The examples often show two people who do things differently, and both ways are fine. There are no right or wrong answers, so pick what is actually true for you.
+            </p>
+            <button
+              onClick={() => setView('assessment')}
+              className="w-full bg-blue-600 text-white py-3 rounded-md font-bold text-center hover:bg-blue-700 transition-colors shadow-sm text-sm"
+            >
+              Start Clarity Scan
+            </button>
           </div>
         );
       }
